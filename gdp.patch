@@ -1,0 +1,81 @@
+diff -Naru gdp/gstgdpdepay.c gdp/gstgdpdepay.c
+--- gdp/gstgdpdepay.c	2021-07-29 17:50:29.507243896 +0200
++++ gdp/gstgdpdepay.c	2021-07-29 17:50:23.051184646 +0200
+@@ -45,9 +45,12 @@
+ enum
+ {
+   PROP_0,
+-  PROP_TS_OFFSET
++  PROP_TS_OFFSET,
++  PROP_IGNORE_FIRST_CAPS_PROBLEM
+ };
+ 
++#define DEFAULT_IGNORE_FIRST_CAPS_PROBLEM (FALSE)
++
+ static GstStaticPadTemplate gdp_depay_sink_template =
+ GST_STATIC_PAD_TEMPLATE ("sink",
+     GST_PAD_SINK,
+@@ -106,6 +109,14 @@
+           G_MININT64, G_MAXINT64, 0,
+           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+ 
++  g_object_class_install_property (gobject_class, PROP_IGNORE_FIRST_CAPS_PROBLEM,
++      g_param_spec_boolean ("ignore-first-caps-problem",
++          "Ignore first caps problem",
++          "If TRUE then gdpdepay will ignore situation when it didn't recieve "
++          "state caps before buffer receiving",
++          DEFAULT_IGNORE_FIRST_CAPS_PROBLEM,
++          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
++
+   gst_element_class_set_static_metadata (gstelement_class,
+       "GDP Depayloader", "GDP/Depayloader",
+       "Depayloads GStreamer Data Protocol buffers",
+@@ -144,6 +155,8 @@
+ 
+   gdpdepay->allocator = NULL;
+   gst_allocation_params_init (&gdpdepay->allocation_params);
++
++  gdpdepay->ignore_first_caps_problem = DEFAULT_IGNORE_FIRST_CAPS_PROBLEM;
+ }
+ 
+ static void
+@@ -175,6 +188,9 @@
+     case PROP_TS_OFFSET:
+       this->ts_offset = g_value_get_int64 (value);
+       break;
++    case PROP_IGNORE_FIRST_CAPS_PROBLEM:
++      this->ignore_first_caps_problem = g_value_get_boolean (value);
++      break;
+     default:
+       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+       break;
+@@ -193,6 +209,9 @@
+     case PROP_TS_OFFSET:
+       g_value_set_int64 (value, this->ts_offset);
+       break;
++    case PROP_IGNORE_FIRST_CAPS_PROBLEM:
++      g_value_set_boolean (value, this->ignore_first_caps_problem);
++      break;
+     default:
+       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+       break;
+@@ -358,7 +377,7 @@
+       case GST_GDP_DEPAY_STATE_BUFFER:
+       {
+         /* if we receive a buffer without caps first, we error out */
+-        if (!this->caps)
++        if (!this->caps && !this->ignore_first_caps_problem)
+           goto no_caps;
+ 
+         GST_LOG_OBJECT (this, "reading GDP buffer from adapter");
+diff -Naru gdp/gstgdpdepay.h gdp/gstgdpdepay.h
+--- gdp/gstgdpdepay.h	2021-07-29 17:50:29.507243896 +0200
++++ gdp/gstgdpdepay.h	2021-07-29 17:50:23.051184646 +0200
+@@ -68,6 +68,7 @@
+   GstDPPayloadType payload_type;
+ 
+   gint64 ts_offset;
++  gboolean ignore_first_caps_problem;
+ 
+   GstAllocator *allocator;
+   GstAllocationParams allocation_params;
